@@ -53,7 +53,9 @@ pub fn try_deposit(deps: DepsMut, info: MessageInfo) -> Result<Response, Contrac
         deps.storage,
         &info.sender,
         |balance: Option<Uint128>| -> StdResult<_> {
-            Ok(balance.unwrap_or_default() + info.funds[0].amount)
+            Ok(balance
+                .unwrap_or_default()
+                .checked_add(info.funds[0].amount)?)
         },
     )?;
 
@@ -71,7 +73,9 @@ pub fn try_withdraw(
     USER_BALANCE.update(
         deps.storage,
         &info.sender,
-        |balance: Option<Uint128>| -> StdResult<_> { Ok(balance.unwrap_or_default() - amount) },
+        |balance: Option<Uint128>| -> StdResult<_> {
+            Ok(balance.unwrap_or_default().checked_sub(amount)?)
+        },
     )?;
 
     // send uusd to user
