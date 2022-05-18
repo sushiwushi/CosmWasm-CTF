@@ -18,10 +18,12 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     // admin must provide 1000 uusd when instantiating contract
     if info.funds.len() != 1
-        && info.funds[0].denom != "uusd"
-        && info.funds[0].amount != Uint128::from(1000_u64)
+        || info.funds[0].denom != "uusd"
+        || info.funds[0].amount != Uint128::from(1000_u64)
     {
-        StdError::generic_err("Invalid instantiation");
+        return Err(ContractError::Std(StdError::generic_err(
+            "Invalid instantiation",
+        )));
     }
 
     Ok(Response::new())
@@ -115,6 +117,15 @@ mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env, mock_info};
     use cosmwasm_std::{coins, from_binary};
+
+    #[test]
+    #[should_panic(expected = "Invalid instantiation")]
+    fn invalid_init() {
+        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
+        let msg = InstantiateMsg {};
+        let info = mock_info("creator", &coins(0, "uusd".to_string()));
+        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+    }
 
     #[test]
     fn deposit_success() {
