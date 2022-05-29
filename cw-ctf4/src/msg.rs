@@ -25,7 +25,13 @@ pub enum ReceiveMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    GetBalance { address: String },
+    GetBalance {
+        address: String,
+    },
+    GetAnchorRate {
+        block_height: Option<u64>,
+        distributed_interest: Option<Uint256>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

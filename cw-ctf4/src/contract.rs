@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::ops::Mul;
 use std::str::FromStr;
 
@@ -9,8 +10,9 @@ use crate::state::{AUST_ADDRESS, USER_BALANCE};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    from_slice, to_binary, BalanceResponse, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env,
-    MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128, Uint256, WasmQuery,
+    from_slice, to_binary, BalanceResponse, BankMsg, Binary, Coin, CosmosMsg, Decimal256, Deps,
+    DepsMut, Env, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128, Uint256,
+    WasmQuery,
 };
 use cw20::Cw20ReceiveMsg;
 
@@ -112,29 +114,41 @@ pub fn handle_receive(
     wrapper: Cw20ReceiveMsg,
 ) -> Result<Response, ContractError> {
     let msg: ReceiveMsg = from_slice(&wrapper.msg)?;
+    let total_amount;
+    let exchange_rate;
     match msg {
         ReceiveMsg::Deposit {} => {
             // get sender and amount received
             let sender = deps.api.addr_validate(&wrapper.sender)?;
             let amount = wrapper.amount;
 
+            // load storage aust address
+            let aust_address = AUST_ADDRESS.load(deps.storage)?;
+
             // calculate exchange rate for aUST to UST
             let epoch_state = deps
                 .querier
                 .query::<EpochStateResponse>(&QueryRequest::Wasm(WasmQuery::Smart {
                     // anchor money market address
-                    contract_addr: "terra1sepfj7s0aeg5967uxnfk4thzlerrsktkpelm5s".to_string(),
+                    contract_addr: aust_address.to_string(),
                     msg: to_binary(&AnchorQueryMsg::EpochState {
                         block_height: Some(env.block.height),
                         distributed_interest: None,
                     })?,
                 }))?;
 
-            let calculated_amount = Uint128::from_str(
-                &Uint256::from(amount)
-                    .mul(epoch_state.exchange_rate)
-                    .to_string(),
-            )?;
+            // prevent edge cases
+            if epoch_state.exchange_rate == Decimal256::zero() {
+                return Err(ContractError::Std(StdError::generic_err(
+                    "Invalid exchange rate",
+                )));
+            }
+            exchange_rate = epoch_state.exchange_rate;
+
+            let calculated_amount =
+                Uint128::try_from(Uint256::from(amount).mul(epoch_state.exchange_rate))
+                    .expect("Unable to convert Uint256 into Uint128");
+            total_amount = calculated_amount;
 
             // update user balance
             USER_BALANCE.update(
@@ -149,13 +163,19 @@ pub fn handle_receive(
 
     Ok(Response::new()
         .add_attribute("method", "deposit")
-        .add_attribute("amount", wrapper.amount))
+        .add_attribute("sent_amount", wrapper.amount)
+        .add_attribute("exchange_rate", exchange_rate.to_string())
+        .add_attribute("total_amount", total_amount))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::GetBalance { address } => to_binary(&query_balance(deps, address)?),
+        QueryMsg::GetAnchorRate {
+            block_height,
+            distributed_interest,
+        } => to_binary(&query_aust_rate(deps, block_height, distributed_interest)?),
     }
 }
 
@@ -169,11 +189,37 @@ fn query_balance(deps: Deps, address: String) -> StdResult<BalanceResponse> {
     })
 }
 
+fn query_aust_rate(
+    deps: Deps,
+    block_height: Option<u64>,
+    distributed_interest: Option<Uint256>,
+) -> StdResult<EpochStateResponse> {
+    let aust_address = AUST_ADDRESS.load(deps.storage)?;
+
+    let epoch_state = deps
+        .querier
+        .query::<EpochStateResponse>(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: aust_address.to_string(),
+            msg: to_binary(&AnchorQueryMsg::EpochState {
+                block_height,
+                distributed_interest,
+            })?,
+        }))?;
+
+    Ok(epoch_state)
+}
+
 #[cfg(test)]
 mod tests {
+    use std::borrow::BorrowMut;
+
+    use crate::mock_anchor;
+
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary};
+    use cosmwasm_std::{coin, coins, from_binary, Addr, Decimal256, Empty};
+    use cw_multi_test::{App, BankSudo, Contract, ContractWrapper, Executor, SudoMsg};
+    use mock_anchor::InstantiateMsg as AnchorInstantiateMsg;
 
     #[test]
     #[should_panic(expected = "Invalid instantiation")]
@@ -229,5 +275,168 @@ mod tests {
         let info = mock_info("bob", &coins(10, "uluna".to_string()));
         let msg = ExecuteMsg::Deposit {};
         let _err = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    }
+
+    /// helper function to setup aust and ctf contract and return the addresses
+    fn setup_contracts(app: &mut App) -> (Addr, Addr) {
+        // create mock anchor contract box
+        fn aust_contract() -> Box<dyn Contract<Empty>> {
+            let contract = ContractWrapper::new(
+                mock_anchor::execute,
+                mock_anchor::instantiate,
+                mock_anchor::query,
+            );
+            Box::new(contract)
+        }
+
+        // create ctf contract box
+        fn ctf_contract() -> Box<dyn Contract<Empty>> {
+            let contract = ContractWrapper::new(
+                crate::contract::execute,
+                crate::contract::instantiate,
+                crate::contract::query,
+            );
+            Box::new(contract)
+        }
+
+        // store aust and ctf code id
+        let aust_id = app.store_code(aust_contract());
+        let ctf_id = app.store_code(ctf_contract());
+
+        // mock anchor init msg
+        let msg = AnchorInstantiateMsg {};
+
+        // init aust contract
+        let aust_init = app
+            .instantiate_contract(
+                aust_id,
+                Addr::unchecked(ADMIN_ADDR),
+                &msg,
+                &[],
+                "aust address",
+                None,
+            )
+            .unwrap();
+
+        // ctf contract init msg
+        let msg = InstantiateMsg {
+            aust_address: aust_init.to_string(), // use initialized aust contract addr
+        };
+
+        // mint tokens to admin
+        let init_funding = vec![coin(1_000, "uusd")];
+        app.sudo(SudoMsg::Bank({
+            BankSudo::Mint {
+                to_address: ADMIN_ADDR.to_string(),
+                amount: init_funding.clone(),
+            }
+        }))
+        .unwrap();
+
+        // init ctf contract
+        let ctf_init = app
+            .instantiate_contract(
+                ctf_id,
+                Addr::unchecked(ADMIN_ADDR),
+                &msg,
+                &coins(1_000, "uusd".to_string()),
+                "aust address",
+                None,
+            )
+            .unwrap();
+
+        (aust_init, ctf_init)
+    }
+
+    const ADMIN_ADDR: &str = "admin";
+    const ALICE: &str = "alice";
+    const HACKER: &str = "hacker";
+
+    #[test]
+    fn test_aust_query() {
+        let mut app = App::default();
+        let (_, ctf_init) = setup_contracts(&mut app);
+        let res: EpochStateResponse = app
+            .borrow_mut()
+            .wrap()
+            .query_wasm_smart(
+                &ctf_init,
+                &QueryMsg::GetAnchorRate {
+                    block_height: None,
+                    distributed_interest: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(res.exchange_rate, Decimal256::from_str("1.20").unwrap());
+    }
+
+    #[test]
+    fn aust_deposit() {
+        let mut app = App::default();
+        let (aust_init, ctf_init) = setup_contracts(&mut app);
+
+        // aust deposit msg
+        let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+            sender: ALICE.to_string(),
+            amount: Uint128::from(1_000_u64),
+            msg: to_binary(&ReceiveMsg::Deposit {}).unwrap(),
+        });
+
+        // execute msg
+        let res = app
+            .borrow_mut()
+            .execute_contract(aust_init, ctf_init.clone(), &msg, &[])
+            .unwrap();
+
+        assert_eq!(res.events[1].attributes[2].value, 1_000.to_string()); // sent_amount
+        assert_eq!(res.events[1].attributes[3].value, "1.2"); // exchange_rate
+
+        let res: BalanceResponse = app
+            .borrow_mut()
+            .wrap()
+            .query_wasm_smart(
+                &ctf_init,
+                &QueryMsg::GetBalance {
+                    address: ALICE.to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(res.amount.denom, "uusd".to_string());
+        assert_eq!(res.amount.amount, Uint128::from(1_200_u64)); // 1_000 aUST * 1.20 exchange rate = 1_200 UST
+    }
+
+    #[test]
+    fn exploit() {
+        let mut app = App::default();
+        let (_, ctf_init) = setup_contracts(&mut app);
+
+        // construct deposit msg
+        let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+            sender: HACKER.to_string(),
+            amount: Uint128::from(10_000_u64),
+            msg: to_binary(&ReceiveMsg::Deposit {}).unwrap(),
+        });
+
+        // since there's no cw20 addr check, an attacker can simply create a new token and send to the contract
+        let fake_contract = Addr::unchecked("hacker001");
+
+        // execute msg
+        app.borrow_mut()
+            .execute_contract(fake_contract, ctf_init.clone(), &msg, &[])
+            .unwrap();
+
+        let res: BalanceResponse = app
+            .borrow_mut()
+            .wrap()
+            .query_wasm_smart(
+                &ctf_init,
+                &QueryMsg::GetBalance {
+                    address: HACKER.to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(res.amount.amount, Uint128::from(12_000_u64)); // 10_000 aUST * 1.20 exchange rate = 12_000 UST
     }
 }
