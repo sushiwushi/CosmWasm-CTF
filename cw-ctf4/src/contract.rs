@@ -437,6 +437,6 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(res.amount.amount, Uint128::from(12_000_u64)); // 10_000 aUST * 1.20 exchange rate = 12_000 UST
+        assert_eq!(res.amount.amount, Uint128::from(12_000_u64)); // 10_000 tokens * 1.20 exchange rate = 12_000 UST
     }
 }
