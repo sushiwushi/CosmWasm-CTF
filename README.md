@@ -19,5 +19,5 @@ Having a proof of concept exploit code will give you an idea of how the contract
 Did you happen to find an unintended bug in the challenge? Or have a new vulnerable contract you want to share? Or maybe just a simple efficiency suggestion? Feel free to open an issue or submit a pull request! Please keep in mind that for now, only bugs with an exploitable scenario with an accompanying proof of concept exploit code will be accepted.
 
 ## Good to know
-- If you're entirely new to Rust or Cosmwasm, the [Terra Academy](https://academy.terra.money/collections) is an excellent tutorial to pick up the basics.
+- If you're entirely new to Rust or CosmWasm, the [Terra Academy](https://academy.terra.money/collections) is an excellent tutorial to pick up the basics.
 - For simplicity, the UST denomination used in the contract assumes 0 decimals.
