@@ -16,9 +16,9 @@ pub fn instantiate(
     info: MessageInfo,
     _msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    // admin must provide 1000 uusd when instantiating contract
+    // admin must provide 1000 uosmo when instantiating contract
     if info.funds.len() != 1
-        || info.funds[0].denom != "uusd"
+        || info.funds[0].denom != "uosmo"
         || info.funds[0].amount != Uint128::from(1000_u64)
     {
         return Err(ContractError::Std(StdError::generic_err(
@@ -43,8 +43,8 @@ pub fn execute(
 }
 
 pub fn try_deposit(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
-    // validate uusd sent
-    if info.funds.len() != 1 || info.funds[0].denom != "uusd" {
+    // validate uosmo sent
+    if info.funds.len() != 1 || info.funds[0].denom != "uosmo" {
         return Err(ContractError::Std(StdError::generic_err(
             "Invalid deposit!",
         )));
@@ -76,11 +76,11 @@ pub fn try_withdraw(
         |balance: Option<u128>| -> StdResult<_> { Ok(balance.unwrap_or_default() - amount) },
     )?;
 
-    // send uusd to user
+    // send uosmo to user
     let msg = CosmosMsg::Bank(BankMsg::Send {
         to_address: info.sender.to_string(),
         amount: vec![Coin {
-            denom: "uusd".to_string(),
+            denom: "uosmo".to_string(),
             amount: Uint128::from(amount),
         }],
     });
@@ -104,7 +104,7 @@ fn query_balance(deps: Deps, address: String) -> StdResult<BalanceResponse> {
         .unwrap_or_default();
     Ok(BalanceResponse {
         amount: Coin {
-            denom: "uusd".to_string(),
+            denom: "uosmo".to_string(),
             amount: Uint128::from(user_balance.unwrap_or_default()),
         },
     })
@@ -121,7 +121,7 @@ mod tests {
     fn invalid_init() {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
         let msg = InstantiateMsg {};
-        let info = mock_info("creator", &coins(0, "uusd".to_string()));
+        let info = mock_info("creator", &coins(0, "uosmo".to_string()));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
     }
 
@@ -130,11 +130,11 @@ mod tests {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
 
         let msg = InstantiateMsg {};
-        let info = mock_info("creator", &coins(1000, "uusd".to_string()));
+        let info = mock_info("creator", &coins(1000, "uosmo".to_string()));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        // user able to deposit uusd
-        let info = mock_info("alice", &coins(100, "uusd"));
+        // user able to deposit uosmo
+        let info = mock_info("alice", &coins(100, "uosmo"));
         let msg = ExecuteMsg::Deposit {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -157,7 +157,7 @@ mod tests {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
 
         let msg = InstantiateMsg {};
-        let info = mock_info("creator", &coins(1000, "uusd".to_string()));
+        let info = mock_info("creator", &coins(1000, "uosmo".to_string()));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // invalid deposit
@@ -172,7 +172,7 @@ mod tests {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
 
         let msg = InstantiateMsg {};
-        let info = mock_info("creator", &coins(1000, "uusd".to_string()));
+        let info = mock_info("creator", &coins(1000, "uosmo".to_string()));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // we send a vector of coins to trick the system we deposited UST
@@ -182,7 +182,7 @@ mod tests {
                 amount: Uint128::from(1000_u64),
             },
             Coin {
-                denom: "uusd".to_string(),
+                denom: "uosmo".to_string(),
                 amount: Uint128::from(0_u64),
             },
         ];
@@ -197,7 +197,7 @@ mod tests {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
 
         let msg = InstantiateMsg {};
-        let info = mock_info("creator", &coins(1000, "uusd".to_string()));
+        let info = mock_info("creator", &coins(1000, "uosmo".to_string()));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // check hacker balance, should be zero

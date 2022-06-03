@@ -37,8 +37,8 @@ pub fn execute(
 }
 
 pub fn try_deposit(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response, ContractError> {
-    // validate uusd sent
-    if info.funds.len() != 1 || info.funds[0].denom != "uusd" {
+    // validate uosmo sent
+    if info.funds.len() != 1 || info.funds[0].denom != "uosmo" {
         return Err(ContractError::Std(StdError::generic_err(
             "Invalid deposit!",
         )));
@@ -114,7 +114,7 @@ pub fn try_withdraw(
     let msg = CosmosMsg::Bank(BankMsg::Send {
         to_address: info.sender.to_string(),
         amount: vec![Coin {
-            denom: "uusd".to_string(),
+            denom: "uosmo".to_string(),
             amount: total_amount,
         }],
     });
@@ -176,7 +176,7 @@ mod tests {
         assert_eq!(value.next_id, 0_u64);
 
         // alice able to donate
-        let info = mock_info("alice", &coins(10, "uusd"));
+        let info = mock_info("alice", &coins(10, "uosmo"));
         let msg = ExecuteMsg::Deposit {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(value.next_id, 1_u64);
 
         // able to donate more than once
-        let info = mock_info("alice", &coins(20, "uusd"));
+        let info = mock_info("alice", &coins(20, "uosmo"));
         let msg = ExecuteMsg::Deposit {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -241,7 +241,7 @@ mod tests {
         let info = mock_info("admin", &[]);
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        // cannot deposit other funds than uusd
+        // cannot deposit other funds than uosmo
         let info = mock_info("bob", &coins(10, "umyr"));
         let msg = ExecuteMsg::Deposit {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -271,7 +271,7 @@ mod tests {
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // donate zero funds to cause out of gas errors
-        let info = mock_info("hacker", &coins(0, "uusd"));
+        let info = mock_info("hacker", &coins(0, "uosmo"));
         let msg = ExecuteMsg::Deposit {};
 
         // keep repeating
