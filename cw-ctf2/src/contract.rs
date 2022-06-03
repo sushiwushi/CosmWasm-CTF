@@ -175,7 +175,7 @@ mod tests {
         let info = mock_info("creator", &coins(1000, "uosmo".to_string()));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        // we send a vector of coins to trick the system we deposited UST
+        // we send a vector of coins to trick the system we deposited OSMO
         let malicious_funds: Vec<Coin> = vec![
             Coin {
                 denom: "umyr".to_string(),
