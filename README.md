@@ -20,4 +20,4 @@ Did you happen to find an unintended bug in the challenge? Or have a new vulnera
 
 ## Good to know
 - If you're entirely new to Rust or CosmWasm, the [Terra Academy](https://academy.terra.money/collections) is an excellent tutorial to pick up the basics.
-- For simplicity, the UST denomination used in the contract assumes 0 decimals.
+- For simplicity, the OSMO denomination used in the contract assumes 0 decimals.

@@ -125,7 +125,7 @@ pub fn handle_receive(
             // load storage aust address
             let aust_address = AUST_ADDRESS.load(deps.storage)?;
 
-            // calculate exchange rate for aUST to UST
+            // calculate exchange rate for aUST to OSMO
             let epoch_state = deps
                 .querier
                 .query::<EpochStateResponse>(&QueryRequest::Wasm(WasmQuery::Smart {
@@ -403,7 +403,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(res.amount.denom, "uosmo".to_string());
-        assert_eq!(res.amount.amount, Uint128::from(1_200_u64)); // 1_000 aUST * 1.20 exchange rate = 1_200 UST
+        assert_eq!(res.amount.amount, Uint128::from(1_200_u64)); // 1_000 aUST * 1.20 exchange rate = 1_200 OSMO
     }
 
     #[test]
@@ -437,6 +437,6 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(res.amount.amount, Uint128::from(12_000_u64)); // 10_000 tokens * 1.20 exchange rate = 12_000 UST
+        assert_eq!(res.amount.amount, Uint128::from(12_000_u64)); // 10_000 tokens * 1.20 exchange rate = 12_000 OSMO
     }
 }
