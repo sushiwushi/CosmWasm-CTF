@@ -184,7 +184,7 @@ mod tests {
             },
             Coin {
                 denom: "uosmo".to_string(),
-                amount: Uint128::from(0_u64),
+                amount: Uint128::from(1_u64),
             },
         ];
         let info = mock_info("hacker", &malicious_funds);
